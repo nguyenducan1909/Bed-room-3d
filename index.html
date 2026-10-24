@@ -1,0 +1,1249 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Căn Phòng Hoạt Hình 3D Tương Tác</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
+    <!-- Three.js & OrbitControls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Quicksand', sans-serif;
+            background-color: #1e293b;
+            user-select: none;
+        }
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+        }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.88);
+            backdrop-filter: blur(12px);
+            border: 2px solid #1e293b;
+            box-shadow: 4px 4px 0px #1e293b;
+        }
+        .cartoon-btn {
+            border: 2px solid #1e293b;
+            box-shadow: 2px 2px 0px #1e293b;
+            transition: all 0.15s ease;
+        }
+        .cartoon-btn:hover {
+            transform: translate(-1px, -1px);
+            box-shadow: 3px 3px 0px #1e293b;
+        }
+        .cartoon-btn:active {
+            transform: translate(1px, 1px);
+            box-shadow: 0px 0px 0px #1e293b;
+        }
+        .cartoon-btn.active {
+            background-color: #b5d354;
+            color: #1e293b;
+            font-weight: 700;
+        }
+        /* Tooltip */
+        #object-tooltip {
+            pointer-events: none;
+            transition: opacity 0.15s ease, transform 0.15s ease;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 3D Canvas Container -->
+    <div id="canvas-container"></div>
+
+    <!-- Hover Tooltip -->
+    <div id="object-tooltip" class="fixed top-6 left-1/2 -translate-x-1/2 z-20 opacity-0 glass-panel px-4 py-1.5 rounded-full text-sm font-bold text-slate-800 flex items-center gap-2">
+        <span id="tooltip-icon">👆</span>
+        <span id="tooltip-text">Nhấn để tương tác</span>
+    </div>
+
+    <!-- Top Left Header Badge -->
+    <div class="fixed top-4 left-4 z-10 glass-panel px-4 py-2.5 rounded-2xl max-w-xs">
+        <div class="flex items-center gap-2.5">
+            <div class="w-3.5 h-3.5 rounded-full bg-[#f27463] border-2 border-slate-800"></div>
+            <h1 class="font-bold text-base text-slate-900 tracking-tight">Phòng Ngủ 3D Hoạt Hình</h1>
+        </div>
+        <p class="text-xs text-slate-600 mt-1 leading-relaxed">
+            🖱️ <b>Kéo chuột trái:</b> Xoay 360° &bull; <b>Cuộn:</b> Thu phóng<br>
+            👆 <b>Click đồ vật:</b> Bật/tắt đèn, mở cửa, ngăn kéo, chạy xe...
+        </p>
+    </div>
+
+    <!-- Right Control Panel -->
+    <div class="fixed top-4 right-4 z-10 glass-panel p-3.5 rounded-2xl w-64 flex flex-col gap-3 max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between border-b-2 border-slate-800/15 pb-2">
+            <span class="font-bold text-sm text-slate-800">🎥 Góc nhìn Camera</span>
+            <button id="toggle-ui-btn" class="text-xs px-2 py-0.5 rounded bg-slate-200 hover:bg-slate-300 font-bold text-slate-700">Thu gọn</button>
+        </div>
+
+        <div id="ui-content" class="flex flex-col gap-3">
+            <!-- Camera Presets -->
+            <div class="grid grid-cols-2 gap-1.5">
+                <button onclick="setCameraPreset('original')" class="cartoon-btn bg-[#8fd3f4] text-slate-900 text-xs font-bold py-1.5 px-2 rounded-xl col-span-2">
+                    🖼️ Góc nhìn giống ảnh gốc
+                </button>
+                <button onclick="setCameraPreset('overview')" class="cartoon-btn bg-white text-slate-800 text-xs font-semibold py-1.5 px-2 rounded-xl">
+                    🌐 Toàn cảnh
+                </button>
+                <button onclick="setCameraPreset('top')" class="cartoon-btn bg-white text-slate-800 text-xs font-semibold py-1.5 px-2 rounded-xl">
+                    🦅 Từ trên xuống
+                </button>
+                <button onclick="setCameraPreset('bed')" class="cartoon-btn bg-white text-slate-800 text-xs font-semibold py-1.5 px-2 rounded-xl">
+                    🛏️ Góc giường
+                </button>
+                <button onclick="setCameraPreset('shelf')" class="cartoon-btn bg-white text-slate-800 text-xs font-semibold py-1.5 px-2 rounded-xl">
+                    🚗 Góc tủ & xe
+                </button>
+            </div>
+
+            <!-- Lighting & Shadows -->
+            <div class="border-t-2 border-slate-800/15 pt-2.5">
+                <span class="font-bold text-sm text-slate-800 block mb-2">💡 Ánh sáng & Đổ bóng</span>
+                <div class="flex flex-col gap-1.5">
+                    <button id="btn-ceiling-light" onclick="toggleCeilingLight()" class="cartoon-btn active text-xs py-1.5 px-3 rounded-xl flex items-center justify-between">
+                        <span>💚 Đèn thả trần</span>
+                        <span id="status-ceiling" class="text-[11px] px-1.5 py-0.5 bg-white/70 rounded-md">BẬT</span>
+                    </button>
+                    <button id="btn-table-lamp" onclick="toggleTableLamp()" class="cartoon-btn active text-xs py-1.5 px-3 rounded-xl flex items-center justify-between">
+                        <span>💛 Đèn ngủ để bàn</span>
+                        <span id="status-table" class="text-[11px] px-1.5 py-0.5 bg-white/70 rounded-md">BẬT</span>
+                    </button>
+                    <button id="btn-sunlight" onclick="toggleDayNight()" class="cartoon-btn active text-xs py-1.5 px-3 rounded-xl flex items-center justify-between">
+                        <span>☀️ Nắng qua cửa sổ</span>
+                        <span id="status-sun" class="text-[11px] px-1.5 py-0.5 bg-white/70 rounded-md">NGÀY</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Display Options -->
+            <div class="border-t-2 border-slate-800/15 pt-2.5">
+                <span class="font-bold text-sm text-slate-800 block mb-2">🎨 Chế độ hiển thị</span>
+                <div class="grid grid-cols-2 gap-1.5">
+                    <button id="btn-outlines" onclick="toggleOutlines()" class="cartoon-btn active text-xs py-1.5 px-2 rounded-xl">
+                        ✒️ Viền Cartoon
+                    </button>
+                    <button id="btn-autorotate" onclick="toggleAutoRotate()" class="cartoon-btn bg-white text-xs py-1.5 px-2 rounded-xl">
+                        🔄 Tự xoay
+                    </button>
+                    <button id="btn-smartwalls" onclick="toggleSmartWalls()" class="cartoon-btn active text-xs py-1.5 px-2 rounded-xl col-span-2">
+                        🧱 Tường tự ẩn khi xoay ra sau
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // 1. KHỞI TẠO SCENE, CAMERA, RENDERER
+        // ==========================================
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xdbeafe);
+
+        const camera = new THREE.PerspectiveCamera(44, window.innerWidth / window.innerHeight, 0.1, 100);
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.outputEncoding = THREE.sRGBEncoding;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.05;
+        container.appendChild(renderer.domElement);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.06;
+        controls.maxDistance = 32;
+        controls.minDistance = 3;
+        controls.target.set(0, 3.2, 0.5);
+
+        // ==========================================
+        // 2. BẢNG MÀU CHUẨN THEO BỨC TRANH GỐC
+        // ==========================================
+        const COLORS = {
+            wallBlue: 0x8fd3f4,
+            ceilingWhite: 0xe3f2fd,
+            floorPeach: 0xe8b48a,
+            doorGreen: 0xb5d354,
+            doorFrameWhite: 0xffffff,
+            knobGrey: 0xc5dce6,
+            cabinetCoral: 0xe5735c,
+            cabinetInner: 0xc85a44,
+            cabinetDoorBlue: 0xd8ecf8,
+            bookPink: 0xd988a2,
+            bookYellow: 0xf2e379,
+            bookBlue: 0x6abce2,
+            carBlue: 0x6ea8c8,
+            carWindow: 0xcceeff,
+            lampGreen: 0xa3d55c,
+            lampShadeYellow: 0xf7e67c,
+            rugLightBlue: 0xbde0f0,
+            rugDarkBlue: 0x6faee0,
+            bedWood: 0xc87d52,
+            bedBlanket: 0x7dc0e8,
+            pillowWhite: 0xffffff,
+            curtainYellow: 0xf5df78,
+            rodSilver: 0xcfd8dc,
+            nightstandRed: 0xd95b43,
+            nightstandTop: 0xc5dce6,
+            potBrown: 0xbf7b4b,
+            leafGreen: 0xa2d149,
+            flowerCoral: 0xf27463,
+            bushGreen: 0xa8d868,
+            skyOutside: 0xe0f7fa,
+            outlineBlack: 0x1a202c
+        };
+
+        // Quản lý danh sách viền đen cartoon và các vật thể tương tác
+        const outlineMeshes = [];
+        const interactables = [];
+        let showOutlines = true;
+        let smartWallsEnabled = true;
+
+        // Hàm tạo vật liệu chuẩn có phản chiếu nhẹ và nhận/đổ bóng đẹp
+        function createMat(color, roughness = 0.75, metalness = 0.05, extra = {}) {
+            return new THREE.MeshStandardMaterial({
+                color,
+                roughness,
+                metalness,
+                ...extra
+            });
+        }
+
+        // Hàm thêm viền đen Cartoon (LineSegments) cho bất kỳ Mesh nào
+        function addCartoonEdge(mesh, thresholdAngle = 22, opacity = 0.85) {
+            const edgesGeo = new THREE.EdgesGeometry(mesh.geometry, thresholdAngle);
+            const edgesMat = new THREE.LineBasicMaterial({
+                color: COLORS.outlineBlack,
+                transparent: true,
+                opacity: opacity
+            });
+            const line = new THREE.LineSegments(edgesGeo, edgesMat);
+            line.visible = showOutlines;
+            mesh.add(line);
+            outlineMeshes.push(line);
+            return line;
+        }
+
+        // Hàm tiện ích tạo Mesh kèm đổ bóng và viền
+        function createMesh(geometry, material, castShadow = true, receiveShadow = true, addEdge = true, edgeAngle = 22) {
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.castShadow = castShadow;
+            mesh.receiveShadow = receiveShadow;
+            if (addEdge) addCartoonEdge(mesh, edgeAngle);
+            return mesh;
+        }
+
+        // ==========================================
+        // 3. KÍCH THƯỚC PHÒNG & KIẾN TRÚC
+        // ==========================================
+        const ROOM_W = 10;   // X từ -5 đến +5
+        const ROOM_H = 7.6;  // Y từ 0 đến 7.6
+        const ROOM_D = 10.5; // Z từ -5.25 đến +5.25
+
+        const architectureGroup = new THREE.Group();
+        scene.add(architectureGroup);
+
+        // 3.1 Sàn nhà (Floor)
+        const floorGeo = new THREE.BoxGeometry(ROOM_W + 0.4, 0.3, ROOM_D + 0.4);
+        const floorMat = createMat(COLORS.floorPeach, 0.8);
+        const floorMesh = createMesh(floorGeo, floorMat, false, true, true);
+        floorMesh.position.set(0, -0.15, 0);
+        architectureGroup.add(floorMesh);
+
+        // 3.2 Trần nhà (Ceiling)
+        const ceilingGroup = new THREE.Group();
+        const ceilingGeo = new THREE.BoxGeometry(ROOM_W + 0.4, 0.25, ROOM_D + 0.4);
+        const ceilingMat = createMat(COLORS.ceilingWhite, 0.85);
+        const ceilingMesh = createMesh(ceilingGeo, ceilingMat, false, true, true);
+        ceilingMesh.position.set(0, ROOM_H + 0.125, 0);
+        ceilingGroup.add(ceilingMesh);
+
+        // Vệt bóng tròn trang trí trên trần giống bức tranh
+        const ceilOvalGeo = new THREE.CylinderGeometry(1.35, 1.35, 0.02, 32);
+        ceilOvalGeo.scale(1.3, 1, 0.8);
+        const ceilOvalMat = createMat(0xcbddec, 0.9);
+        const ceilOval = createMesh(ceilOvalGeo, ceilOvalMat, false, true, false);
+        ceilOval.position.set(-0.9, ROOM_H - 0.01, -0.8);
+        ceilingGroup.add(ceilOval);
+        architectureGroup.add(ceilingGroup);
+
+        // 3.3 Tường sau (Back Wall)
+        const backWallMat = createMat(COLORS.wallBlue, 0.85, 0.02, { transparent: true, opacity: 1 });
+        const backWall = createMesh(new THREE.BoxGeometry(ROOM_W, ROOM_H, 0.3), backWallMat, true, true, true);
+        backWall.position.set(0, ROOM_H / 2, -ROOM_D / 2 - 0.15);
+        architectureGroup.add(backWall);
+
+        // 3.4 Tường trái (Left Wall)
+        const leftWallMat = createMat(COLORS.wallBlue, 0.85, 0.02, { transparent: true, opacity: 1 });
+        const leftWall = createMesh(new THREE.BoxGeometry(0.3, ROOM_H, ROOM_D), leftWallMat, true, true, true);
+        leftWall.position.set(-ROOM_W / 2 - 0.15, ROOM_H / 2, 0);
+        architectureGroup.add(leftWall);
+
+        // 3.5 Tường phải có lỗ cửa sổ thực sự (Right Wall)
+        // Cửa sổ từ Z = -1.8 đến Z = +2.8, Y từ 1.9 đến 5.7
+        const rightWallGroup = new THREE.Group();
+        const rightWallMat = createMat(COLORS.wallBlue, 0.85, 0.02, { transparent: true, opacity: 1 });
+
+        // Mảng dưới cửa sổ (Y: 0 -> 1.9)
+        const rwBottom = createMesh(new THREE.BoxGeometry(0.3, 1.9, ROOM_D), rightWallMat, true, true, true);
+        rwBottom.position.set(ROOM_W / 2 + 0.15, 1.9 / 2, 0);
+        rightWallGroup.add(rwBottom);
+
+        // Mảng trên cửa sổ (Y: 5.7 -> 7.6)
+        const rwTop = createMesh(new THREE.BoxGeometry(0.3, ROOM_H - 5.7, ROOM_D), rightWallMat, true, true, true);
+        rwTop.position.set(ROOM_W / 2 + 0.15, 5.7 + (ROOM_H - 5.7) / 2, 0);
+        rightWallGroup.add(rwTop);
+
+        // Mảng sau cửa sổ (Z: -5.25 -> -1.8)
+        const rwBack = createMesh(new THREE.BoxGeometry(0.3, 3.8, 3.45), rightWallMat, true, true, true);
+        rwBack.position.set(ROOM_W / 2 + 0.15, 1.9 + 1.9, -5.25 + 3.45 / 2);
+        rightWallGroup.add(rwBack);
+
+        // Mảng trước cửa sổ (Z: 2.8 -> 5.25)
+        const rwFront = createMesh(new THREE.BoxGeometry(0.3, 3.8, 2.45), rightWallMat, true, true, true);
+        rwFront.position.set(ROOM_W / 2 + 0.15, 1.9 + 1.9, 2.8 + 2.45 / 2);
+        rightWallGroup.add(rwFront);
+
+        architectureGroup.add(rightWallGroup);
+
+        // ==========================================
+        // 4. CHI TIẾT NỘI THẤT 3D TRONG PHÒNG
+        // ==========================================
+
+        // ------------------------------------------
+        // 4.1 CỬA RA VÀO BÊN TRÁI (Có thể đóng/mở)
+        // ------------------------------------------
+        const doorAssembly = new THREE.Group();
+        doorAssembly.position.set(-ROOM_W / 2, 0, 1.3);
+        scene.add(doorAssembly);
+
+        const whiteFrameMat = createMat(COLORS.doorFrameWhite, 0.6);
+        // Khung bao cửa trắng
+        const frameLeft = createMesh(new THREE.BoxGeometry(0.18, 4.9, 0.25), whiteFrameMat);
+        frameLeft.position.set(0.05, 2.45, 1.35);
+        const frameRight = createMesh(new THREE.BoxGeometry(0.18, 4.9, 0.25), whiteFrameMat);
+        frameRight.position.set(0.05, 2.45, -1.35);
+        const frameTop = createMesh(new THREE.BoxGeometry(0.18, 0.28, 2.95), whiteFrameMat);
+        frameTop.position.set(0.05, 4.78, 0);
+        doorAssembly.add(frameLeft, frameRight, frameTop);
+
+        // Bản lề xoay cửa (nằm ở cạnh trong Z = -1.2)
+        const doorPivot = new THREE.Group();
+        doorPivot.position.set(0.06, 0, -1.22);
+        doorAssembly.add(doorPivot);
+
+        const doorPanelMat = createMat(COLORS.doorGreen, 0.7);
+        const doorPanel = createMesh(new THREE.BoxGeometry(0.12, 4.65, 2.44), doorPanelMat);
+        doorPanel.position.set(0, 2.325, 1.22);
+        doorPivot.add(doorPanel);
+
+        // Tay nắm cửa bầu dục cả 2 mặt
+        const knobGeo = new THREE.SphereGeometry(0.16, 20, 20);
+        knobGeo.scale(0.6, 1.35, 0.9);
+        const knobMat = createMat(COLORS.knobGrey, 0.4, 0.2);
+        const knobInside = createMesh(knobGeo, knobMat, true, true, true, 35);
+        knobInside.position.set(0.09, 2.2, 2.05);
+        const knobOutside = knobInside.clone();
+        knobOutside.position.set(-0.09, 2.2, 2.05);
+        doorPivot.add(knobInside, knobOutside);
+
+        let isDoorOpen = false;
+        doorPanel.userData = {
+            name: "Cửa phòng (Click để Mở/Đóng)",
+            icon: "🚪",
+            onClick: () => { isDoorOpen = !isDoorOpen; }
+        };
+        interactables.push(doorPanel, knobInside);
+
+        // ------------------------------------------
+        // 4.2 TỦ SÁCH BẬC THANG & XE ĐỒ CHƠI & ĐÈN BÀN
+        // ------------------------------------------
+        const cabinetGroup = new THREE.Group();
+        // Đặt sát tường sau bên trái
+        cabinetGroup.position.set(-2.05, 0, -4.35);
+        scene.add(cabinetGroup);
+
+        const coralMat = createMat(COLORS.cabinetCoral, 0.7);
+        const coralDarkMat = createMat(COLORS.cabinetInner, 0.8);
+        const drawerBlueMat = createMat(COLORS.cabinetDoorBlue, 0.6);
+
+        // Phần thân tủ dưới (Rộng 3.9, Cao 1.45, Sâu 1.45)
+        const baseCab = createMesh(new THREE.BoxGeometry(3.9, 1.45, 1.45), coralMat);
+        baseCab.position.set(0, 0.725, 0);
+        cabinetGroup.add(baseCab);
+
+        // Hai cánh cửa tủ màu xanh nhạt phía trước (Có bản lề mở được)
+        const leftCabDoorPivot = new THREE.Group();
+        leftCabDoorPivot.position.set(-1.72, 0.725, 0.73);
+        const leftCabDoor = createMesh(new THREE.BoxGeometry(1.7, 1.05, 0.08), drawerBlueMat);
+        leftCabDoor.position.set(0.85, 0, 0);
+        const leftHandle = createMesh(new THREE.SphereGeometry(0.08, 16, 16), knobMat, true, true, false);
+        leftHandle.scale.set(0.8, 1.4, 0.8);
+        leftHandle.position.set(1.5, 0, 0.06);
+        leftCabDoor.add(leftHandle);
+        leftCabDoorPivot.add(leftCabDoor);
+        cabinetGroup.add(leftCabDoorPivot);
+
+        const rightCabDoorPivot = new THREE.Group();
+        rightCabDoorPivot.position.set(1.72, 0.725, 0.73);
+        const rightCabDoor = createMesh(new THREE.BoxGeometry(1.7, 1.05, 0.08), drawerBlueMat);
+        rightCabDoor.position.set(-0.85, 0, 0);
+        const rightHandle = leftHandle.clone();
+        rightHandle.position.set(-1.5, 0, 0.06);
+        rightCabDoor.add(rightHandle);
+        rightCabDoorPivot.add(rightCabDoor);
+        cabinetGroup.add(rightCabDoorPivot);
+
+        let cabDoorsOpen = false;
+        const toggleCabDoors = () => { cabDoorsOpen = !cabDoorsOpen; };
+        leftCabDoor.userData = { name: "Cánh tủ dưới (Click để Mở/Đóng)", icon: "🗄️", onClick: toggleCabDoors };
+        rightCabDoor.userData = { name: "Cánh tủ dưới (Click để Mở/Đóng)", icon: "🗄️", onClick: toggleCabDoors };
+        interactables.push(leftCabDoor, rightCabDoor);
+
+        // Phần kệ đứng 2 tầng bên trái (X từ -1.95 đến +0.25 -> rộng 2.2, cao 2.75)
+        const shelfW = 2.2;
+        const shelfH = 2.75;
+        const shelfD = 1.42;
+        const shelfCenterX = -0.85;
+        const thick = 0.14;
+
+        // Thành trái, phải, trên, giữa và lưng kệ
+        const sLeft = createMesh(new THREE.BoxGeometry(thick, shelfH, shelfD), coralMat);
+        sLeft.position.set(shelfCenterX - shelfW / 2 + thick / 2, 1.45 + shelfH / 2, 0);
+        const sRight = createMesh(new THREE.BoxGeometry(thick, shelfH, shelfD), coralMat);
+        sRight.position.set(shelfCenterX + shelfW / 2 - thick / 2, 1.45 + shelfH / 2, 0);
+        const sTop = createMesh(new THREE.BoxGeometry(shelfW, thick, shelfD), coralMat);
+        sTop.position.set(shelfCenterX, 1.45 + shelfH - thick / 2, 0);
+        const sMid = createMesh(new THREE.BoxGeometry(shelfW - thick * 2, thick, shelfD - 0.05), coralMat);
+        sMid.position.set(shelfCenterX, 1.45 + shelfH / 2, 0);
+        const sBack = createMesh(new THREE.BoxGeometry(shelfW - thick * 2, shelfH - thick, 0.1), coralDarkMat);
+        sBack.position.set(shelfCenterX, 1.45 + shelfH / 2, -shelfD / 2 + 0.05);
+        cabinetGroup.add(sLeft, sRight, sTop, sMid, sBack);
+
+        // --- 3 Quyển sách 3D ở ngăn trên ---
+        const booksGroup = new THREE.Group();
+        booksGroup.position.set(shelfCenterX, 1.45 + shelfH / 2 + thick / 2, 0);
+        cabinetGroup.add(booksGroup);
+
+        function create3DBook(w, h, d, coverColor) {
+            const bGroup = new THREE.Group();
+            const cover = createMesh(new THREE.BoxGeometry(w, h, d), createMat(coverColor, 0.6));
+            cover.position.y = h / 2;
+            // Ruột trang sách trắng bên trong
+            const pages = createMesh(
+                new THREE.BoxGeometry(w * 0.9, h * 0.94, d * 0.88),
+                createMat(0xfefefe, 0.8),
+                false, true, false
+            );
+            pages.position.set(0.01, h / 2, 0.02);
+            bGroup.add(cover, pages);
+            return bGroup;
+        }
+
+        const book1 = create3DBook(0.32, 0.98, 0.78, COLORS.bookPink);
+        book1.position.set(-0.62, 0, 0.05);
+        const book2 = create3DBook(0.36, 1.04, 0.8, COLORS.bookYellow);
+        book2.position.set(-0.26, 0, 0.05);
+        const book3 = create3DBook(0.32, 0.96, 0.78, COLORS.bookBlue);
+        book3.position.set(0.32, 0.02, 0.05);
+        book3.rotation.z = 0.34; // Nghiêng giống hệt bức ảnh
+        booksGroup.add(book1, book2, book3);
+
+        // --- Chiếc ô tô đồ chơi 3D ở ngăn dưới ---
+        const carGroup = new THREE.Group();
+        const carBaseX = shelfCenterX;
+        const carBaseY = 1.45 + 0.22;
+        carGroup.position.set(carBaseX, carBaseY, 0.12);
+        carGroup.rotation.y = 0.22;
+        cabinetGroup.add(carGroup);
+
+        const carBodyMat = createMat(COLORS.carBlue, 0.45, 0.15);
+        // Thân dưới xe
+        const carLower = createMesh(new THREE.BoxGeometry(1.18, 0.32, 0.64), carBodyMat);
+        carLower.position.y = 0.16;
+        carGroup.add(carLower);
+
+        // Cabin mui xe bo tròn
+        const carCabin = createMesh(new THREE.BoxGeometry(0.68, 0.28, 0.56), carBodyMat);
+        carCabin.position.set(-0.06, 0.44, 0);
+        carGroup.add(carCabin);
+
+        // Cửa kính xe
+        const winMat = createMat(COLORS.carWindow, 0.2, 0.3);
+        const frontWindshield = createMesh(new THREE.BoxGeometry(0.05, 0.22, 0.48), winMat, false, false, false);
+        frontWindshield.position.set(0.27, 0.43, 0);
+        const sideWindows = createMesh(new THREE.BoxGeometry(0.56, 0.2, 0.58), winMat, false, false, false);
+        sideWindows.position.set(-0.06, 0.44, 0);
+        carGroup.add(frontWindshield, sideWindows);
+
+        // Cản trước màu trắng & 2 đèn pha vàng
+        const bumper = createMesh(new THREE.BoxGeometry(0.1, 0.1, 0.66), whiteFrameMat);
+        bumper.position.set(0.58, 0.08, 0);
+        carGroup.add(bumper);
+
+        const headlightMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
+        const hlLeft = createMesh(new THREE.SphereGeometry(0.065, 12, 12), headlightMat, false, false, true);
+        hlLeft.position.set(0.59, 0.21, 0.18);
+        const hlRight = hlLeft.clone();
+        hlRight.position.set(0.59, 0.21, -0.18);
+        carGroup.add(hlLeft, hlRight);
+
+        // 4 Bánh xe
+        const wheelGeo = new THREE.CylinderGeometry(0.17, 0.17, 0.14, 20);
+        wheelGeo.rotateX(Math.PI / 2);
+        const tireMat = createMat(0x2d3748, 0.8);
+        const hubGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.16, 16);
+        hubGeo.rotateX(Math.PI / 2);
+
+        [[-0.34, 0.32], [0.34, 0.32], [-0.34, -0.32], [0.34, -0.32]].forEach(([wx, wz]) => {
+            const wheel = createMesh(wheelGeo, tireMat);
+            wheel.position.set(wx, 0.02, wz);
+            const hub = createMesh(hubGeo, whiteFrameMat, false, false, false);
+            wheel.add(hub);
+            carGroup.add(wheel);
+        });
+
+        let carDriveAnim = 0;
+        carLower.userData = {
+            name: "Ô tô đồ chơi (Click để chạy thử!)",
+            icon: "🚗",
+            onClick: () => { carDriveAnim = 1.0; }
+        };
+        carCabin.userData = carLower.userData;
+        interactables.push(carLower, carCabin);
+
+        // --- Đèn ngủ để bàn 3D ở bậc tủ bên phải ---
+        const tableLampGroup = new THREE.Group();
+        tableLampGroup.position.set(1.08, 1.45, 0.05);
+        cabinetGroup.add(tableLampGroup);
+
+        const lampGreenMat = createMat(COLORS.lampGreen, 0.6);
+        const lampBase = createMesh(new THREE.CylinderGeometry(0.38, 0.44, 0.12, 24), lampGreenMat);
+        lampBase.position.y = 0.06;
+        const lampStem = createMesh(new THREE.CylinderGeometry(0.055, 0.055, 0.6, 16), createMat(0x475569, 0.5));
+        lampStem.position.y = 0.36;
+
+        const tableShadeMat = new THREE.MeshStandardMaterial({
+            color: COLORS.lampShadeYellow,
+            emissive: 0xf59e0b,
+            emissiveIntensity: 0.35,
+            roughness: 0.5,
+            side: THREE.DoubleSide
+        });
+        const tableShade = createMesh(new THREE.CylinderGeometry(0.28, 0.62, 0.88, 28, 1, true), tableShadeMat);
+        tableShade.position.y = 0.92;
+
+        // Nắp viền trên chao đèn
+        const tableShadeTop = createMesh(new THREE.CylinderGeometry(0.28, 0.28, 0.03, 24), tableShadeMat);
+        tableShadeTop.position.y = 1.35;
+
+        tableLampGroup.add(lampBase, lampStem, tableShade, tableShadeTop);
+
+        tableShade.userData = {
+            name: "Đèn bàn (Click để Bật/Tắt)",
+            icon: "💡",
+            onClick: () => toggleTableLamp()
+        };
+        interactables.push(tableShade);
+
+        // ------------------------------------------
+        // 4.3 THẢM TRẢI SÀN 3 LỚP Ở GIỮA PHÒNG
+        // ------------------------------------------
+        const rugGroup = new THREE.Group();
+        rugGroup.position.set(-1.35, 0, 1.35);
+        scene.add(rugGroup);
+
+        const rugLightMat = createMat(COLORS.rugLightBlue, 0.9);
+        const rugDarkMat = createMat(COLORS.rugDarkBlue, 0.9);
+
+        const rugOuter = createMesh(new THREE.BoxGeometry(4.4, 0.05, 3.6), rugLightMat, false, true, true);
+        rugOuter.position.y = 0.025;
+
+        const rugMiddle = createMesh(new THREE.BoxGeometry(2.75, 0.06, 2.25), rugDarkMat, false, true, true);
+        rugMiddle.position.y = 0.035;
+
+        const rugCenterGeo = new THREE.CylinderGeometry(0.75, 0.75, 0.07, 32);
+        rugCenterGeo.scale(1.15, 1, 0.75);
+        const rugCenter = createMesh(rugCenterGeo, rugLightMat, false, true, true);
+        rugCenter.position.y = 0.04;
+
+        rugGroup.add(rugOuter, rugMiddle, rugCenter);
+
+        // ------------------------------------------
+        // 4.4 ĐỒNG HỒ TREO TƯỜNG (Có kim chạy)
+        // ------------------------------------------
+        const clockGroup = new THREE.Group();
+        clockGroup.position.set(1.15, 4.75, -ROOM_D / 2 + 0.06);
+        scene.add(clockGroup);
+
+        const clockRim = createMesh(new THREE.CylinderGeometry(0.76, 0.76, 0.12, 32), createMat(0xe2e8f0, 0.5));
+        clockRim.rotation.x = Math.PI / 2;
+        const clockFace = createMesh(new THREE.CylinderGeometry(0.58, 0.58, 0.14, 32), createMat(0xcbd5e1, 0.7));
+        clockFace.rotation.x = Math.PI / 2;
+        clockGroup.add(clockRim, clockFace);
+
+        // Hai kim đồng hồ màu cam đào giống tranh
+        const handMat = createMat(COLORS.cabinetCoral, 0.5);
+        const hourHandPivot = new THREE.Group();
+        hourHandPivot.position.z = 0.09;
+        const hourHandGeo = new THREE.SphereGeometry(0.09, 16, 16);
+        hourHandGeo.scale(1, 2.6, 0.5);
+        const hourHand = createMesh(hourHandGeo, handMat);
+        hourHand.position.y = 0.16;
+        hourHandPivot.add(hourHand);
+        hourHandPivot.rotation.z = 1.48; // Chỉ hướng ~9h30
+
+        const minHandPivot = new THREE.Group();
+        minHandPivot.position.z = 0.1;
+        const minHandGeo = new THREE.SphereGeometry(0.085, 16, 16);
+        minHandGeo.scale(1, 3.3, 0.5);
+        const minHand = createMesh(minHandGeo, handMat);
+        minHand.position.y = 0.22;
+        minHandPivot.add(minHand);
+        minHandPivot.rotation.z = 0.78; // Chỉ hướng ~10h30
+
+        const clockPin = createMesh(new THREE.SphereGeometry(0.11, 16, 16), handMat);
+        clockPin.scale.z = 0.6;
+        clockPin.position.z = 0.12;
+
+        clockGroup.add(hourHandPivot, minHandPivot, clockPin);
+
+        let clockFastSpin = 0;
+        clockRim.userData = {
+            name: "Đồng hồ treo tường (Click để xoay kim)",
+            icon: "🕒",
+            onClick: () => { clockFastSpin = 1.0; }
+        };
+        clockFace.userData = clockRim.userData;
+        interactables.push(clockRim, clockFace);
+
+        // ------------------------------------------
+        // 4.5 GIƯỜNG NGỦ ĐƠN & GỐI TAI MÈO 4 GÓC
+        // ------------------------------------------
+        const bedGroup = new THREE.Group();
+        bedGroup.position.set(1.75, 0, -2.05);
+        scene.add(bedGroup);
+
+        const bedWoodMat = createMat(COLORS.bedWood, 0.75);
+        const bedW = 2.65;
+        const bedL = 4.65;
+
+        // Khung giường dưới
+        const bedFrame = createMesh(new THREE.BoxGeometry(bedW, 0.72, bedL), bedWoodMat);
+        bedFrame.position.set(0, 0.36, 0);
+        bedGroup.add(bedFrame);
+
+        // Đầu giường cong (ExtrudeShape để có vòm cong mượt giống tranh)
+        const hbShape = new THREE.Shape();
+        hbShape.moveTo(-bedW / 2, 0);
+        hbShape.lineTo(-bedW / 2, 1.75);
+        hbShape.quadraticCurveTo(0, 2.38, bedW / 2, 1.75);
+        hbShape.lineTo(bedW / 2, 0);
+        hbShape.closePath();
+
+        const hbGeo = new THREE.ExtrudeGeometry(hbShape, {
+            depth: 0.22,
+            bevelEnabled: true,
+            bevelSegments: 3,
+            steps: 1,
+            bevelSize: 0.03,
+            bevelThickness: 0.03
+        });
+        const headboard = createMesh(hbGeo, bedWoodMat);
+        headboard.position.set(0, 0, -bedL / 2 - 0.1);
+        bedGroup.add(headboard);
+
+        // Đuôi giường
+        const footboard = createMesh(new THREE.BoxGeometry(bedW + 0.04, 0.92, 0.22), bedWoodMat);
+        footboard.position.set(0, 0.46, bedL / 2 + 0.02);
+        bedGroup.add(footboard);
+
+        // Đệm trắng bên dưới
+        const sheetMesh = createMesh(new THREE.BoxGeometry(bedW - 0.16, 0.42, bedL - 0.15), whiteFrameMat);
+        sheetMesh.position.set(0, 0.85, 0);
+        bedGroup.add(sheetMesh);
+
+        // Chăn xanh phủ 4/5 giường
+        const blanketMat = createMat(COLORS.bedBlanket, 0.8);
+        const blanketMesh = createMesh(new THREE.BoxGeometry(bedW - 0.12, 0.46, bedL * 0.78), blanketMat);
+        blanketMesh.position.set(0, 0.88, bedL * 0.11);
+        bedGroup.add(blanketMesh);
+
+        // Chiếc gối trắng phồng có 4 tai nhọn ở 4 góc giống hệt tranh
+        const pillowGroup = new THREE.Group();
+        pillowGroup.position.set(0, 1.38, -bedL / 2 + 0.78);
+        pillowGroup.rotation.x = 0.32;
+        bedGroup.add(pillowGroup);
+
+        const pillowMat = createMat(COLORS.pillowWhite, 0.7);
+        const pillowBodyGeo = new THREE.SphereGeometry(0.75, 24, 20);
+        pillowBodyGeo.scale(1.18, 0.78, 0.42);
+        const pillowBody = createMesh(pillowBodyGeo, pillowMat, true, true, true, 35);
+        pillowGroup.add(pillowBody);
+
+        // 4 tai góc gối
+        const earGeo = new THREE.ConeGeometry(0.14, 0.34, 16);
+        const earCoords = [
+            [-0.72, 0.44, -0.02, 0, 0, 0.85],
+            [0.72, 0.44, -0.02, 0, 0, -0.85],
+            [-0.74, -0.42, 0.04, 0, 0, 2.25],
+            [0.74, -0.42, 0.04, 0, 0, -2.25]
+        ];
+        earCoords.forEach(([ex, ey, ez, rx, ry, rz]) => {
+            const ear = createMesh(earGeo, pillowMat, true, true, false);
+            ear.position.set(ex, ey, ez);
+            ear.rotation.set(rx, ry, rz);
+            pillowGroup.add(ear);
+        });
+
+        let pillowBounce = 0;
+        pillowBody.userData = {
+            name: "Gối bông mềm (Click để nhún)",
+            icon: "☁️",
+            onClick: () => { pillowBounce = 1.0; }
+        };
+        interactables.push(pillowBody);
+
+        // ------------------------------------------
+        // 4.6 CỬA SỔ LỚN, RÈM VÀNG & CÂY XANH BÊN NGOÀI
+        // ------------------------------------------
+        const windowGroup = new THREE.Group();
+        // Tâm cửa sổ ở Z = 0.5, Y = 3.8 trên tường phải (X = 5)
+        windowGroup.position.set(ROOM_W / 2, 3.8, 0.5);
+        scene.add(windowGroup);
+
+        const winW = 4.6;
+        const winH = 3.8;
+
+        // Khung bao cửa sổ màu trắng
+        const wfTop = createMesh(new THREE.BoxGeometry(0.38, 0.22, winW + 0.3), whiteFrameMat);
+        wfTop.position.set(0.12, winH / 2, 0);
+        const wfBot = createMesh(new THREE.BoxGeometry(0.46, 0.24, winW + 0.4), whiteFrameMat);
+        wfBot.position.set(0.08, -winH / 2, 0);
+        const wfLeft = createMesh(new THREE.BoxGeometry(0.38, winH, 0.22), whiteFrameMat);
+        wfLeft.position.set(0.12, 0, -winW / 2);
+        const wfRight = createMesh(new THREE.BoxGeometry(0.38, winH, 0.22), whiteFrameMat);
+        wfRight.position.set(0.12, 0, winW / 2);
+
+        // Đố cửa chữ thập ở giữa
+        const wfMidV = createMesh(new THREE.BoxGeometry(0.24, winH, 0.2), whiteFrameMat);
+        wfMidV.position.set(0.12, 0, 0);
+        const wfMidH = createMesh(new THREE.BoxGeometry(0.24, 0.2, winW), whiteFrameMat);
+        wfMidH.position.set(0.12, 0.25, 0);
+
+        windowGroup.add(wfTop, wfBot, wfLeft, wfRight, wfMidV, wfMidH);
+
+        // Cảnh cây xanh 3D và bầu trời bên ngoài cửa sổ
+        const outdoorGroup = new THREE.Group();
+        outdoorGroup.position.set(1.15, -0.5, 0);
+        windowGroup.add(outdoorGroup);
+
+        const bushMat = createMat(COLORS.bushGreen, 0.85);
+        [
+            [0, -0.8, -1.3, 1.25],
+            [0.2, -0.5, -0.2, 1.45],
+            [0.1, -0.9, 0.9, 1.15],
+            [0, -0.4, 1.8, 1.5]
+        ].forEach(([bx, by, bz, r]) => {
+            const bushGeo = new THREE.SphereGeometry(r, 20, 20);
+            bushGeo.scale(0.55, 1.1, 1);
+            const bush = createMesh(bushGeo, bushMat, false, true, true, 30);
+            bush.position.set(bx, by, bz);
+            outdoorGroup.add(bush);
+        });
+
+        // Thanh treo rèm & các khoen tròn 3D
+        const rodMat = createMat(COLORS.rodSilver, 0.4, 0.3);
+        const curtainRod = createMesh(new THREE.CylinderGeometry(0.09, 0.09, winW + 0.9, 20), rodMat);
+        curtainRod.rotation.x = Math.PI / 2;
+        curtainRod.position.set(-0.22, winH / 2 + 0.22, 0);
+        windowGroup.add(curtainRod);
+
+        // Các vòng khoen rèm
+        const ringGeo = new THREE.TorusGeometry(0.16, 0.045, 12, 24);
+        ringGeo.rotateY(Math.PI / 2);
+        [-2.05, -1.65, -1.25, -0.85, 1.45, 1.95].forEach(rz => {
+            const ring = createMesh(ringGeo, rodMat);
+            ring.position.set(-0.22, winH / 2 + 0.22, rz);
+            windowGroup.add(ring);
+        });
+
+        // Rèm cửa màu vàng bên trái (được buộc gọn ở phần dưới giống tranh)
+        const curtainMat = createMat(COLORS.curtainYellow, 0.75);
+        const leftCurtainGroup = new THREE.Group();
+        leftCurtainGroup.position.set(-0.24, 0, -1.45);
+        windowGroup.add(leftCurtainGroup);
+
+        // Thân trên rèm trái phồng nhẹ
+        const lcUpperGeo = new THREE.CylinderGeometry(0.68, 0.24, 2.55, 20);
+        lcUpperGeo.scale(0.36, 1, 1.15);
+        const lcUpper = createMesh(lcUpperGeo, curtainMat);
+        lcUpper.position.set(0, 0.72, 0);
+        leftCurtainGroup.add(lcUpper);
+
+        // Đai buộc rèm
+        const lcTie = createMesh(new THREE.CylinderGeometry(0.28, 0.28, 0.22, 20), curtainMat);
+        lcTie.scale.set(0.45, 1, 1.1);
+        lcTie.position.set(0, -0.55, 0);
+        leftCurtainGroup.add(lcTie);
+
+        // Đuôi rèm xòe bên dưới nút buộc
+        const lcLowerGeo = new THREE.ConeGeometry(0.48, 1.15, 20);
+        lcLowerGeo.scale(0.38, 1, 1.1);
+        const lcLower = createMesh(lcLowerGeo, curtainMat);
+        lcLower.position.set(0, -1.1, 0);
+        leftCurtainGroup.add(lcLower);
+
+        // Rèm cửa màu vàng bên phải
+        const rightCurtainGroup = new THREE.Group();
+        rightCurtainGroup.position.set(-0.24, 0.1, 1.95);
+        windowGroup.add(rightCurtainGroup);
+
+        const rcBodyGeo = new THREE.CylinderGeometry(0.55, 0.65, 3.85, 20);
+        rcBodyGeo.scale(0.36, 1, 1.05);
+        const rcBody = createMesh(rcBodyGeo, curtainMat);
+        rightCurtainGroup.add(rcBody);
+
+        // ------------------------------------------
+        // 4.7 TỦ ĐẦU GIƯỜNG PHÍA TRƯỚC & CHẬU HOA 3D
+        // ------------------------------------------
+        const nightstandGroup = new THREE.Group();
+        nightstandGroup.position.set(3.75, 0, 3.15);
+        scene.add(nightstandGroup);
+
+        const nsBodyMat = createMat(COLORS.nightstandRed, 0.7);
+        const nsTopMat = createMat(COLORS.nightstandTop, 0.6);
+
+        // Thân tủ đỏ cam
+        const nsBody = createMesh(new THREE.BoxGeometry(1.75, 1.65, 2.05), nsBodyMat);
+        nsBody.position.y = 0.825;
+        nightstandGroup.add(nsBody);
+
+        // Mặt đá xanh xám dày phía trên
+        const nsTop = createMesh(new THREE.BoxGeometry(1.95, 0.24, 2.25), nsTopMat);
+        nsTop.position.y = 1.77;
+        nightstandGroup.add(nsTop);
+
+        // 2 Ngăn kéo hướng vào trong phòng (phía -X) có thể kéo ra/đóng vào
+        const drawersContainer = new THREE.Group();
+        drawersContainer.position.set(-0.88, 0, 0);
+        nightstandGroup.add(drawersContainer);
+
+        const topDrawer = createMesh(new THREE.BoxGeometry(0.1, 0.56, 1.68), drawerBlueMat);
+        topDrawer.position.set(0, 1.22, 0);
+        const topKnob = createMesh(new THREE.SphereGeometry(0.09, 16, 16), knobMat);
+        topKnob.position.set(-0.08, 0, 0);
+        topDrawer.add(topKnob);
+
+        const botDrawer = createMesh(new THREE.BoxGeometry(0.1, 0.56, 1.68), drawerBlueMat);
+        botDrawer.position.set(0, 0.52, 0);
+        const botKnob = topKnob.clone();
+        botDrawer.add(botKnob);
+
+        drawersContainer.add(topDrawer, botDrawer);
+
+        let isDrawerOpen = false;
+        const toggleNightstandDrawer = () => { isDrawerOpen = !isDrawerOpen; };
+        topDrawer.userData = { name: "Ngăn kéo tủ (Click để Mở/Đóng)", icon: "📥", onClick: toggleNightstandDrawer };
+        botDrawer.userData = topDrawer.userData;
+        interactables.push(topDrawer, botDrawer);
+
+        // --- Chậu hoa 5 cánh trên mặt tủ ---
+        const plantGroup = new THREE.Group();
+        plantGroup.position.set(-0.05, 1.89, -0.15);
+        nightstandGroup.add(plantGroup);
+
+        // Chậu đất nung
+        const potMat = createMat(COLORS.potBrown, 0.8);
+        const potMesh = createMesh(new THREE.CylinderGeometry(0.38, 0.27, 0.56, 24), potMat);
+        potMesh.position.y = 0.28;
+        plantGroup.add(potMesh);
+
+        // 4 Chiếc lá xanh xòe ra 4 phía
+        const leafMat = createMat(COLORS.leafGreen, 0.65);
+        [
+            [-0.36, 0.62, 0.15, 0.2, 0.2, 0.55],
+            [0.36, 0.62, -0.12, -0.2, -0.2, -0.55],
+            [-0.25, 0.72, -0.22, -0.35, 0.4, 0.35],
+            [0.28, 0.72, 0.22, 0.35, -0.4, -0.35]
+        ].forEach(([lx, ly, lz, rx, ry, rz]) => {
+            const leafGeo = new THREE.SphereGeometry(0.32, 16, 16);
+            leafGeo.scale(1.35, 0.35, 0.65);
+            const leaf = createMesh(leafGeo, leafMat);
+            leaf.position.set(lx, ly, lz);
+            leaf.rotation.set(rx, ry, rz);
+            plantGroup.add(leaf);
+        });
+
+        // Cuống hoa và Bông hoa 5 cánh hồng cam hướng về phía người xem
+        const stem = createMesh(new THREE.CylinderGeometry(0.045, 0.045, 0.65, 12), leafMat);
+        stem.position.y = 0.85;
+        plantGroup.add(stem);
+
+        const flowerHead = new THREE.Group();
+        flowerHead.position.set(0, 1.32, 0);
+        flowerHead.rotation.y = -0.55;
+        flowerHead.rotation.x = 0.18;
+        plantGroup.add(flowerHead);
+
+        const flowerCenter = createMesh(new THREE.SphereGeometry(0.18, 16, 16), createMat(0xfef08a, 0.5));
+        flowerCenter.scale.z = 0.6;
+        flowerHead.add(flowerCenter);
+
+        const petalMat = createMat(COLORS.flowerCoral, 0.6);
+        for (let i = 0; i < 5; i++) {
+            const angle = (i / 5) * Math.PI * 2 + 0.2;
+            const petalGeo = new THREE.SphereGeometry(0.24, 16, 16);
+            petalGeo.scale(0.88, 1.15, 0.42);
+            const petal = createMesh(petalGeo, petalMat);
+            petal.position.set(Math.cos(angle) * 0.28, Math.sin(angle) * 0.28, -0.02);
+            petal.rotation.z = angle - Math.PI / 2;
+            flowerHead.add(petal);
+        }
+
+        let flowerWiggle = 0;
+        flowerCenter.userData = {
+            name: "Chậu hoa tươi (Click để đung đưa)",
+            icon: "🌸",
+            onClick: () => { flowerWiggle = 1.0; }
+        };
+        potMesh.userData = flowerCenter.userData;
+        interactables.push(flowerCenter, potMesh);
+
+        // ------------------------------------------
+        // 4.8 ĐÈN THẢ TRẦN 3D Ở TRUNG TÂM
+        // ------------------------------------------
+        const pendantGroup = new THREE.Group();
+        pendantGroup.position.set(0, ROOM_H, -0.5);
+        scene.add(pendantGroup);
+
+        // Đế tròn gắn trần
+        const canopy = createMesh(new THREE.CylinderGeometry(0.32, 0.32, 0.12, 24), lampGreenMat);
+        canopy.position.y = -0.06;
+        // Dây cáp treo
+        const cord = createMesh(new THREE.CylinderGeometry(0.03, 0.03, 1.05, 12), createMat(0x1e293b, 0.8), false, false, false);
+        cord.position.y = -0.58;
+
+        // Chao đèn hình nón cụt màu xanh cốm
+        const pShadeMat = new THREE.MeshStandardMaterial({
+            color: COLORS.lampGreen,
+            roughness: 0.55,
+            side: THREE.DoubleSide
+        });
+        const pShade = createMesh(new THREE.CylinderGeometry(0.22, 1.08, 1.05, 32, 1, true), pShadeMat);
+        pShade.position.y = -1.55;
+
+        // Bóng đèn tròn phát sáng bên trong
+        const bulbMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
+        const bulbMesh = createMesh(new THREE.SphereGeometry(0.26, 20, 20), bulbMat, false, false, true);
+        bulbMesh.position.y = -1.92;
+
+        pendantGroup.add(canopy, cord, pShade, bulbMesh);
+
+        pShade.userData = {
+            name: "Đèn thả trần (Click để Bật/Tắt)",
+            icon: "💡",
+            onClick: () => toggleCeilingLight()
+        };
+        bulbMesh.userData = pShade.userData;
+        interactables.push(pShade, bulbMesh);
+
+        // ==========================================
+        // 5. HỆ THỐNG ÁNH SÁNG & ĐỔ BÓNG (SHADOWS)
+        // ==========================================
+        // 5.1 Ánh sáng môi trường giúp giữ màu sắc tươi tắn như tranh vẽ
+        const hemiLight = new THREE.HemisphereLight(0xffffff, 0xfde68a, 0.58);
+        hemiLight.position.set(0, 10, 0);
+        scene.add(hemiLight);
+
+        // 5.2 Đèn thả trần (PointLight có đổ bóng)
+        const ceilingPointLight = new THREE.PointLight(0xfffbeb, 0.85, 18, 1.5);
+        ceilingPointLight.position.set(0, ROOM_H - 2.1, -0.5);
+        ceilingPointLight.castShadow = true;
+        ceilingPointLight.shadow.mapSize.width = 1024;
+        ceilingPointLight.shadow.mapSize.height = 1024;
+        ceilingPointLight.shadow.bias = -0.002;
+        scene.add(ceilingPointLight);
+
+        // 5.3 Đèn ngủ để bàn (PointLight ấm áp có đổ bóng)
+        const tablePointLight = new THREE.PointLight(0xfde047, 0.7, 9, 1.8);
+        tablePointLight.position.set(-0.97, 2.35, -4.3);
+        tablePointLight.castShadow = true;
+        tablePointLight.shadow.mapSize.width = 512;
+        tablePointLight.shadow.mapSize.height = 512;
+        tablePointLight.shadow.bias = -0.002;
+        scene.add(tablePointLight);
+
+        // 5.4 Ánh nắng mặt trời chiếu xiên qua khung cửa sổ bên phải
+        const sunLight = new THREE.DirectionalLight(0xfff7ed, 0.75);
+        sunLight.position.set(13, 9.5, 2.2);
+        sunLight.target.position.set(-1, 1, -0.5);
+        sunLight.castShadow = true;
+        sunLight.shadow.mapSize.width = 2048;
+        sunLight.shadow.mapSize.height = 2048;
+        sunLight.shadow.camera.near = 2;
+        sunLight.shadow.camera.far = 25;
+        const d = 7.5;
+        sunLight.shadow.camera.left = -d;
+        sunLight.shadow.camera.right = d;
+        sunLight.shadow.camera.top = d;
+        sunLight.shadow.camera.bottom = -d;
+        sunLight.shadow.bias = -0.0008;
+        scene.add(sunLight);
+        scene.add(sunLight.target);
+
+        // ==========================================
+        // 6. ĐIỀU KHIỂN CAMERA PRESETS & TƯƠNG TÁC UI
+        // ==========================================
+        let targetCamPos = new THREE.Vector3(0, 3.85, 11.2);
+        let targetLookAt = new THREE.Vector3(0, 3.35, 0);
+        let isTransitioningCam = false;
+
+        function setCameraPreset(preset) {
+            isTransitioningCam = true;
+            if (preset === 'original') {
+                // Góc chính diện khớp với bức tranh mẫu
+                targetCamPos.set(0, 3.85, 11.2);
+                targetLookAt.set(0, 3.35, 0);
+            } else if (preset === 'overview') {
+                targetCamPos.set(-7.5, 7.8, 11.5);
+                targetLookAt.set(0, 2.6, -0.5);
+            } else if (preset === 'top') {
+                targetCamPos.set(0, 15.5, 2.5);
+                targetLookAt.set(0, 0, -0.2);
+            } else if (preset === 'bed') {
+                targetCamPos.set(-2.8, 4.2, 3.8);
+                targetLookAt.set(2.2, 2.0, -1.5);
+            } else if (preset === 'shelf') {
+                targetCamPos.set(2.2, 3.6, 2.6);
+                targetLookAt.set(-2.0, 2.5, -4.0);
+            }
+        }
+
+        // Đặt góc nhìn ban đầu giống ảnh gốc
+        camera.position.copy(targetCamPos);
+        controls.target.copy(targetLookAt);
+        controls.update();
+
+        // Khi người dùng tự kéo chuột thì dừng chuyển động mượt của preset
+        controls.addEventListener('start', () => {
+            isTransitioningCam = false;
+        });
+
+        // Trạng thái các nút bật/tắt
+        let ceilingLightOn = true;
+        let tableLampOn = true;
+        let isDaytime = true;
+
+        function toggleCeilingLight() {
+            ceilingLightOn = !ceilingLightOn;
+            ceilingPointLight.intensity = ceilingLightOn ? 0.85 : 0;
+            bulbMat.color.setHex(ceilingLightOn ? 0xfef08a : 0x64748b);
+            const btn = document.getElementById('btn-ceiling-light');
+            const st = document.getElementById('status-ceiling');
+            btn.classList.toggle('active', ceilingLightOn);
+            st.textContent = ceilingLightOn ? 'BẬT' : 'TẮT';
+        }
+
+        function toggleTableLamp() {
+            tableLampOn = !tableLampOn;
+            tablePointLight.intensity = tableLampOn ? 0.7 : 0;
+            tableShadeMat.emissiveIntensity = tableLampOn ? 0.35 : 0;
+            const btn = document.getElementById('btn-table-lamp');
+            const st = document.getElementById('status-table');
+            btn.classList.toggle('active', tableLampOn);
+            st.textContent = tableLampOn ? 'BẬT' : 'TẮT';
+        }
+
+        function toggleDayNight() {
+            isDaytime = !isDaytime;
+            sunLight.intensity = isDaytime ? 0.75 : 0.12;
+            sunLight.color.setHex(isDaytime ? 0xfff7ed : 0x60a5fa);
+            hemiLight.intensity = isDaytime ? 0.58 : 0.22;
+            scene.background.setHex(isDaytime ? 0xdbeafe : 0x0f172a);
+            const btn = document.getElementById('btn-sunlight');
+            const st = document.getElementById('status-sun');
+            btn.classList.toggle('active', isDaytime);
+            st.textContent = isDaytime ? 'NGÀY' : 'ĐÊM';
+        }
+
+        function toggleOutlines() {
+            showOutlines = !showOutlines;
+            outlineMeshes.forEach(line => { line.visible = showOutlines; });
+            document.getElementById('btn-outlines').classList.toggle('active', showOutlines);
+        }
+
+        function toggleAutoRotate() {
+            controls.autoRotate = !controls.autoRotate;
+            controls.autoRotateSpeed = 1.8;
+            document.getElementById('btn-autorotate').classList.toggle('active', controls.autoRotate);
+        }
+
+        function toggleSmartWalls() {
+            smartWallsEnabled = !smartWallsEnabled;
+            document.getElementById('btn-smartwalls').classList.toggle('active', smartWallsEnabled);
+            if (!smartWallsEnabled) {
+                leftWall.visible = true;
+                backWall.visible = true;
+                rightWallGroup.visible = true;
+                ceilingGroup.visible = true;
+            }
+        }
+
+        // Nút thu gọn/mở rộng bảng điều khiển
+        const toggleUiBtn = document.getElementById('toggle-ui-btn');
+        const uiContent = document.getElementById('ui-content');
+        toggleUiBtn.addEventListener('click', () => {
+            const hidden = uiContent.classList.toggle('hidden');
+            toggleUiBtn.textContent = hidden ? 'Mở rộng' : 'Thu gọn';
+        });
+
+        // ==========================================
+        // 7. RAYCASTER: CLICK & HOVER ĐỒ VẬT 3D
+        // ==========================================
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        const tooltip = document.getElementById('object-tooltip');
+        const tooltipText = document.getElementById('tooltip-text');
+        const tooltipIcon = document.getElementById('tooltip-icon');
+        let pointerDownPos = { x: 0, y: 0 };
+
+        window.addEventListener('pointermove', (e) => {
+            mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const hits = raycaster.intersectObjects(interactables, false);
+
+            if (hits.length > 0 && hits[0].object.userData && hits[0].object.userData.name) {
+                document.body.style.cursor = 'pointer';
+                tooltipText.textContent = hits[0].object.userData.name;
+                tooltipIcon.textContent = hits[0].object.userData.icon || '👆';
+                tooltip.style.opacity = '1';
+            } else {
+                document.body.style.cursor = 'default';
+                tooltip.style.opacity = '0';
+            }
+        });
+
+        window.addEventListener('pointerdown', (e) => {
+            pointerDownPos = { x: e.clientX, y: e.clientY };
+        });
+
+        window.addEventListener('pointerup', (e) => {
+            const moveDist = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
+            if (moveDist > 6) return; // Bỏ qua nếu người dùng đang kéo xoay camera
+
+            mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const hits = raycaster.intersectObjects(interactables, false);
+
+            if (hits.length > 0 && hits[0].object.userData && hits[0].object.userData.onClick) {
+                hits[0].object.userData.onClick();
+            }
+        });
+
+        // ==========================================
+        // 8. VÒNG LẶP ANIMATION & SMART WALL CULLING
+        // ==========================================
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const dt = clock.getDelta();
+            const elapsed = clock.getElapsedTime();
+
+            // Chuyển góc camera mượt mà khi bấm nút Preset
+            if (isTransitioningCam) {
+                camera.position.lerp(targetCamPos, 0.08);
+                controls.target.lerp(targetLookAt, 0.08);
+                if (camera.position.distanceTo(targetCamPos) < 0.05) {
+                    isTransitioningCam = false;
+                }
+            }
+            controls.update();
+
+            // Tự động ẩn tường chắn tầm nhìn khi người dùng xoay camera 360 độ ra phía sau
+            if (smartWallsEnabled) {
+                leftWall.visible = camera.position.x > -ROOM_W / 2 - 0.5;
+                backWall.visible = camera.position.z > -ROOM_D / 2 - 0.5;
+                rightWallGroup.visible = camera.position.x < ROOM_W / 2 + 0.8;
+                ceilingGroup.visible = camera.position.y < ROOM_H + 1.2;
+            }
+
+            // 1. Hiệu ứng đóng/mở cửa phòng
+            const targetDoorRot = isDoorOpen ? -Math.PI * 0.42 : 0;
+            doorPivot.rotation.y += (targetDoorRot - doorPivot.rotation.y) * 0.1;
+
+            // 2. Hiệu ứng đóng/mở 2 cánh tủ dưới
+            const targetLeftCab = cabDoorsOpen ? -Math.PI * 0.55 : 0;
+            const targetRightCab = cabDoorsOpen ? Math.PI * 0.55 : 0;
+            leftCabDoorPivot.rotation.y += (targetLeftCab - leftCabDoorPivot.rotation.y) * 0.12;
+            rightCabDoorPivot.rotation.y += (targetRightCab - rightCabDoorPivot.rotation.y) * 0.12;
+
+            // 3. Hiệu ứng kéo ngăn tủ đầu giường
+            const targetDrawerX = isDrawerOpen ? -1.42 : -0.88;
+            drawersContainer.position.x += (targetDrawerX - drawersContainer.position.x) * 0.12;
+
+            // 4. Hiệu ứng xe đồ chơi chạy tới lui trên kệ
+            if (carDriveAnim > 0) {
+                carDriveAnim = Math.max(0, carDriveAnim - dt * 0.85);
+                carGroup.position.x = carBaseX + Math.sin(carDriveAnim * Math.PI * 4) * 0.25;
+                carGroup.rotation.z = Math.sin(carDriveAnim * Math.PI * 8) * 0.06;
+            } else {
+                carGroup.position.x = carBaseX;
+                carGroup.rotation.z = 0;
+            }
+
+            // 5. Hiệu ứng nhún gối bông
+            if (pillowBounce > 0) {
+                pillowBounce = Math.max(0, pillowBounce - dt * 1.5);
+                const s = 1 + Math.sin(pillowBounce * Math.PI * 6) * 0.15 * pillowBounce;
+                pillowGroup.scale.set(s, 1 / s, s);
+            } else {
+                pillowGroup.scale.set(1, 1, 1);
+            }
+
+            // 6. Hiệu ứng bông hoa đung đưa
+            if (flowerWiggle > 0) {
+                flowerWiggle = Math.max(0, flowerWiggle - dt * 1.2);
+                plantGroup.rotation.z = Math.sin(flowerWiggle * Math.PI * 8) * 0.18 * flowerWiggle;
+            } else {
+                plantGroup.rotation.z = Math.sin(elapsed * 1.5) * 0.02;
+            }
+
+            // 7. Hiệu ứng quay kim đồng hồ
+            if (clockFastSpin > 0) {
+                clockFastSpin = Math.max(0, clockFastSpin - dt * 0.9);
+                minHandPivot.rotation.z -= dt * 14 * clockFastSpin;
+                hourHandPivot.rotation.z -= dt * 1.2 * clockFastSpin;
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        // Xử lý thay đổi kích thước màn hình
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        window.onload = function () {
+            animate();
+        };
+    </script>
+</body>
+</html>
